@@ -2,7 +2,8 @@
 #This is temporary build environment
 FROM golang:1.26.8-bookworm AS build
 WORKDIR /src
-COPY go.mod ./
+COPY go.mod go.sum ./
+RUN go mod download
 COPY *.go ./
 RUN go test ./...
 RUN CGO_ENABLED=0 go build -o /gateway .

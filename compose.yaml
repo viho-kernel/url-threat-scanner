@@ -1,5 +1,30 @@
 services:
   gateway:
     build: ./services/gateway
+    environment:
+      DATABASE_URL: postgres://threatscanner:local-development-only@postgres:5432/threatscanner?sslmode=disable
     ports:
       - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_DB: threatscanner
+      POSTGRES_USER: threatscanner
+      POSTGRES_PASSWORD: local-development-only
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U threatscanner -d threatscanner
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "127.0.0.1:5432:5432"
+volumes:
+  postgres-data:

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -25,6 +27,10 @@ type scanResponse struct {
 
 type errorResponse struct {
 	Error string `json:"error"`
+}
+
+type application struct {
+	database *sql.DB
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -168,9 +174,35 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (app *application) readinessHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := app.database.PingContext(ctx); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"status":   "not_ready",
+			"database": "unavailable",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":   "ready",
+		"database": "connected",
+	})
+}
+
 func main() {
+	database, err := openDatabase()
+	if err != nil {
+		log.Fatalf(`{"event":"database_connection_failed","error":%q}`, err.Error())
+	}
+	defer database.Close()
+
+	app := &application{database: database}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
+	mux.HandleFunc("GET /ready", app.readinessHandler)
 	mux.HandleFunc("POST /scans", scanHandler)
 
 	server := &http.Server{
