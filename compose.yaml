@@ -12,6 +12,18 @@ services:
       redis:
         condition: service_healthy
 
+  worker:
+    build:
+      context: ./services/worker
+      dockerfile: Dockerfile
+    environment:
+       DATABASE_URL: postgresql://threatscanner:local-development-only@postgres:5432/threatscanner
+       REDIS_URL: redis://redis:6379
+    depends_on:
+       postgres:
+         condition: service_healthy
+       redis:
+         condition: service_healthy
   postgres:
     image: postgres:16-bookworm
     environment:
