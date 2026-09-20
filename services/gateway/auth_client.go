@@ -49,8 +49,16 @@ func newAuthClient() (*authClient, error) {
 func (client *authClient) verify(
 	ctx context.Context,
 	authorization string,
+	apiKey string,
 ) (*authenticatedUser, error) {
-	if authorization == "" || len(authorization) > 4096 {
+	hasAuthorization := authorization != ""
+	hasAPIKey := apiKey != ""
+
+	if hasAuthorization == hasAPIKey {
+		return nil, errUnauthenticated
+	}
+
+	if len(authorization) > 4096 || len(apiKey) > 256 {
 		return nil, errUnauthenticated
 	}
 
@@ -64,8 +72,15 @@ func (client *authClient) verify(
 		return nil, fmt.Errorf("create auth request: %w", err)
 	}
 
-	request.Header.Set("Authorization", authorization)
 	request.Header.Set("X-Service-Token", client.token)
+
+	if authorization != "" {
+		request.Header.Set("Authorization", authorization)
+	}
+
+	if apiKey != "" {
+		request.Header.Set("X-API-Key", apiKey)
+	}
 
 	response, err := client.httpClient.Do(request)
 	if err != nil {
@@ -78,7 +93,9 @@ func (client *authClient) verify(
 	}
 
 	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 1024))
+		body, _ := io.ReadAll(
+			io.LimitReader(response.Body, 1024),
+		)
 
 		return nil, fmt.Errorf(
 			"auth returned status %d: %s",
@@ -94,7 +111,10 @@ func (client *authClient) verify(
 	)
 
 	if err := decoder.Decode(&user); err != nil {
-		return nil, fmt.Errorf("decode auth response: %w", err)
+		return nil, fmt.Errorf(
+			"decode auth response: %w",
+			err,
+		)
 	}
 
 	if !user.Active || user.UserID == "" {
@@ -111,6 +131,7 @@ func (app *application) authenticateRequest(
 	user, err := app.auth.verify(
 		r.Context(),
 		r.Header.Get("Authorization"),
+		r.Header.Get("X-API-Key"),
 	)
 
 	if errors.Is(err, errUnauthenticated) {
@@ -134,19 +155,36 @@ func (app *application) authenticateRequest(
 	return user, true
 }
 
-func (app *application) authProxyHandler(path string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (app *application) authProxyHandler(
+	path string,
+) http.HandlerFunc {
+	return func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		contentType := strings.ToLower(
+			r.Header.Get("Content-Type"),
+		)
+
 		if !strings.HasPrefix(
-			strings.ToLower(r.Header.Get("Content-Type")),
+			contentType,
 			"application/json",
 		) {
-			writeJSON(w, http.StatusUnsupportedMediaType, errorResponse{
-				Error: "Content-Type must be application/json",
-			})
+			writeJSON(
+				w,
+				http.StatusUnsupportedMediaType,
+				errorResponse{
+					Error: "Content-Type must be application/json",
+				},
+			)
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, 4096)
+		r.Body = http.MaxBytesReader(
+			w,
+			r.Body,
+			4096,
+		)
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -163,42 +201,84 @@ func (app *application) authProxyHandler(path string) http.HandlerFunc {
 			strings.NewReader(string(body)),
 		)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, errorResponse{
-				Error: "could not create authentication request",
-			})
+			writeJSON(
+				w,
+				http.StatusInternalServerError,
+				errorResponse{
+					Error: "could not create authentication request",
+				},
+			)
 			return
 		}
 
-		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("X-Service-Token", app.auth.token)
+		request.Header.Set(
+			"Content-Type",
+			"application/json",
+		)
+
+		request.Header.Set(
+			"X-Service-Token",
+			app.auth.token,
+		)
+
+		authorization := r.Header.Get("Authorization")
+		if authorization != "" {
+			request.Header.Set(
+				"Authorization",
+				authorization,
+			)
+		}
 
 		response, err := app.auth.httpClient.Do(request)
 		if err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, errorResponse{
-				Error: "authentication service unavailable",
-			})
+			writeJSON(
+				w,
+				http.StatusServiceUnavailable,
+				errorResponse{
+					Error: "authentication service unavailable",
+				},
+			)
 			return
 		}
 		defer response.Body.Close()
 
 		responseBody, err := io.ReadAll(
-			io.LimitReader(response.Body, 32*1024),
+			io.LimitReader(
+				response.Body,
+				32*1024,
+			),
 		)
 		if err != nil {
-			writeJSON(w, http.StatusBadGateway, errorResponse{
-				Error: "invalid authentication response",
-			})
+			writeJSON(
+				w,
+				http.StatusBadGateway,
+				errorResponse{
+					Error: "invalid authentication response",
+				},
+			)
 			return
 		}
 
 		var responseJSON any
-		if err := json.Unmarshal(responseBody, &responseJSON); err != nil {
-			writeJSON(w, http.StatusBadGateway, errorResponse{
-				Error: "invalid authentication response",
-			})
+
+		if err := json.Unmarshal(
+			responseBody,
+			&responseJSON,
+		); err != nil {
+			writeJSON(
+				w,
+				http.StatusBadGateway,
+				errorResponse{
+					Error: "invalid authentication response",
+				},
+			)
 			return
 		}
 
-		writeJSON(w, response.StatusCode, responseJSON)
+		writeJSON(
+			w,
+			response.StatusCode,
+			responseJSON,
+		)
 	}
 }

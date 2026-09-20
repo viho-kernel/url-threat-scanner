@@ -1,13 +1,15 @@
+import hashlib
 import hmac
 import json
-import jwt
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID, uuid4
 
+import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from psycopg.errors import UniqueViolation
 from psycopg_pool import ConnectionPool
@@ -67,6 +69,7 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: datetime
 
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
@@ -77,9 +80,25 @@ class TokenResponse(BaseModel):
     token_type: str
     expires_in: int
 
+
 class VerifyResponse(BaseModel):
     user_id: UUID
     active: bool
+
+
+class APIKeyCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    expires_in_days: int = Field(default=90, ge=1, le=365)
+
+
+class APIKeyCreateResponse(BaseModel):
+    id: UUID
+    name: str
+    key: str
+    key_prefix: str
+    created_at: datetime
+    expires_at: datetime
+
 
 def verify_service_token(
     x_service_token: Annotated[str | None, Header()] = None,
@@ -172,6 +191,7 @@ def register(
 
     return user
 
+
 @app.post("/login", response_model=TokenResponse)
 def login(
     request: LoginRequest,
@@ -237,11 +257,7 @@ def login(
         expires_in=jwt_lifetime_minutes * 60,
     )
 
-@app.get("/verify", response_model=VerifyResponse)
-def verify_access_token(
-    authorization: Annotated[str | None, Header()] = None,
-    _: Annotated[None, Depends(verify_service_token)] = None,
-) -> VerifyResponse:
+def require_access_token(authorization: str | None) -> UUID:
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -285,7 +301,197 @@ def verify_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    return user_id
+
+
+def require_api_key(raw_api_key: str | None) -> UUID:
+    if (
+        raw_api_key is None
+        or not raw_api_key.startswith("uts_")
+        or len(raw_api_key) > 256
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid API key",
+        )
+
+    key_hash = hashlib.sha256(raw_api_key.encode()).hexdigest()
+
+    with database_pool.connection() as connection:
+        row = connection.execute(
+            """
+            UPDATE api_keys
+            SET last_used_at = NOW()
+            FROM users
+            WHERE api_keys.key_hash = %s
+              AND api_keys.user_id = users.id
+              AND users.is_active = TRUE
+              AND api_keys.revoked_at IS NULL
+              AND (
+                    api_keys.expires_at IS NULL
+                    OR api_keys.expires_at > NOW()
+                  )
+            RETURNING api_keys.user_id
+            """,
+            (key_hash,),
+        ).fetchone()
+
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid API key",
+        )
+
+    return row[0]
+
+
+@app.get("/verify", response_model=VerifyResponse)
+def verify_access_token(
+    authorization: Annotated[str | None, Header()] = None,
+    x_api_key: Annotated[str | None, Header()] = None,
+    _: Annotated[None, Depends(verify_service_token)] = None,
+) -> VerifyResponse:
+    has_bearer_token = authorization is not None
+    has_api_key = x_api_key is not None
+
+    if has_bearer_token == has_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="provide exactly one authentication credential",
+        )
+
+    if has_bearer_token:
+        user_id = require_access_token(authorization)
+    else:
+        user_id = require_api_key(x_api_key)
+
     return VerifyResponse(
         user_id=user_id,
         active=True,
+    )
+
+
+@app.post(
+    "/api-keys",
+    response_model=APIKeyCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_api_key(
+    request: APIKeyCreateRequest,
+    authorization: Annotated[str | None, Header()] = None,
+    _: Annotated[None, Depends(verify_service_token)] = None,
+) -> APIKeyCreateResponse:
+    user_id = require_access_token(authorization)
+
+    key_name = request.name.strip()
+    if not key_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="API key name cannot be empty",
+        )
+
+    raw_key = f"uts_{secrets.token_urlsafe(32)}"
+    key_prefix = raw_key[:12]
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+
+    created_at = datetime.now(timezone.utc)
+    expires_at = created_at + timedelta(days=request.expires_in_days)
+
+    with database_pool.connection() as connection:
+        row = connection.execute(
+            """
+            INSERT INTO api_keys (
+                user_id,
+                name,
+                key_prefix,
+                key_hash,
+                created_at,
+                expires_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                user_id,
+                key_name,
+                key_prefix,
+                key_hash,
+                created_at,
+                expires_at,
+            ),
+        ).fetchone()
+
+    logger.info(
+        json.dumps(
+            {
+                "event": "api_key_created",
+                "user_id": str(user_id),
+                "api_key_id": str(row[0]),
+                "key_prefix": key_prefix,
+            }
+        )
+    )
+
+    return APIKeyCreateResponse(
+        id=row[0],
+        name=key_name,
+        key=raw_key,
+        key_prefix=key_prefix,
+        created_at=created_at,
+        expires_at=expires_at,
+    )
+
+class APIKeyRevokeRequest(BaseModel):
+    id: UUID
+
+
+class APIKeyRevokeResponse(BaseModel):
+    id: UUID
+    revoked: bool
+    revoked_at: datetime
+
+@app.post(
+    "/api-keys/revoke",
+    response_model=APIKeyRevokeResponse,
+)
+def revoke_api_key(
+    request: APIKeyRevokeRequest,
+    authorization: Annotated[str | None, Header()] = None,
+    _: Annotated[None, Depends(verify_service_token)] = None,
+) -> APIKeyRevokeResponse:
+    user_id = require_access_token(authorization)
+
+    with database_pool.connection() as connection:
+        row = connection.execute(
+            """
+            UPDATE api_keys
+            SET revoked_at = NOW()
+            WHERE id = %s
+              AND user_id = %s
+              AND revoked_at IS NULL
+            RETURNING id, revoked_at
+            """,
+            (request.id, user_id),
+        ).fetchone()
+
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found",
+        )
+
+    logger.info(
+        json.dumps(
+            {
+                "event": "api_key_revoked",
+                "user_id": str(user_id),
+                "api_key_id": str(row[0]),
+            }
+        )
+    )
+
+    return APIKeyRevokeResponse(
+        id=row[0],
+        revoked=True,
+        revoked_at=row[1],
     )

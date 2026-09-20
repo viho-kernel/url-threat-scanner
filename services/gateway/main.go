@@ -319,6 +319,8 @@ func main() {
 	mux.HandleFunc("GET /scans/{id}", app.getScanHandler)
 	mux.HandleFunc("POST /auth/register", app.authProxyHandler("/register"))
 	mux.HandleFunc("POST /auth/login", app.authProxyHandler("/login"))
+	mux.HandleFunc("POST /api-keys", app.authProxyHandler("/api-keys"))
+	mux.HandleFunc("POST /api-keys/revoke", app.authProxyHandler("/api-keys/revoke"),)
 	server := &http.Server{
 		Addr:              ":8080",
 		Handler:           mux,
