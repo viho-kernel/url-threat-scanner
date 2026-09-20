@@ -4,11 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"os"
 	"time"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
+
+const createScansTable = `
+CREATE TABLE IF NOT EXISTS scans (
+	id VARCHAR(32) PRIMARY KEY,
+	url TEXT NOT NULL,
+	status VARCHAR(20) NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);`
 
 func openDatabase() (*sql.DB, error) {
 	databaseURL := os.Getenv("DATABASE_URL")
@@ -29,6 +37,11 @@ func openDatabase() (*sql.DB, error) {
 	defer cancel()
 
 	if err := database.PingContext(ctx); err != nil {
+		database.Close()
+		return nil, err
+	}
+
+	if _, err := database.ExecContext(ctx, createScansTable); err != nil {
 		database.Close()
 		return nil, err
 	}

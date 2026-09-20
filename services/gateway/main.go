@@ -117,7 +117,7 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func scanHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) scanHandler(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
 		writeJSON(w, http.StatusUnsupportedMediaType, errorResponse{
 			Error: "Content-Type must be application/json",
@@ -154,9 +154,19 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scanID, err := newScanID()
-	if err != nil {
+	if err := app.saveScan(
+		r.Context(),
+		scanID,
+		validatedURL.String(),
+	); err != nil {
+		log.Printf(
+			`{"event":"scan_persistence_failed","scan_id":%q,"error":%q}`,
+			scanID,
+			err.Error(),
+		)
+
 		writeJSON(w, http.StatusInternalServerError, errorResponse{
-			Error: "could not create scan",
+			Error: "could not save scan",
 		})
 		return
 	}
@@ -203,8 +213,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	mux.HandleFunc("GET /ready", app.readinessHandler)
-	mux.HandleFunc("POST /scans", scanHandler)
-
+	mux.HandleFunc("POST /scans", app.scanHandler)
+	mux.HandleFunc("GET /scans/{id}", app.getScanHandler)
 	server := &http.Server{
 		Addr:              ":8080",
 		Handler:           mux,
