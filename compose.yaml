@@ -81,7 +81,30 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
-      
+  
+  auth:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://threatscanner:local-development-only@postgres:5432/threatscanner
+      AUTH_SERVICE_TOKEN: ${AUTH_SERVICE_TOKEN:?AUTH_SERVICE_TOKEN is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+    expose:
+      - "8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: 
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/ready')"
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 volumes:
   postgres-data:
   redis-data:
