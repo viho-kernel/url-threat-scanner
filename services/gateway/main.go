@@ -18,12 +18,14 @@ import (
 type application struct {
 	database *sql.DB
 	queue    *jobQueue
+	scanner  *scannerClient
 }
 
 type scanResponse struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
-	URL    string `json:"url"`
+	ID             string          `json:"id"`
+	Status         string          `json:"status"`
+	URL            string          `json:"url"`
+	StaticAnalysis *staticAnalysis `json:"static_analysis"`
 }
 
 type errorResponse struct {
@@ -154,6 +156,22 @@ func (app *application) scanHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	analysis, err := app.scanner.analyze(
+		r.Context(),
+		validatedURL.String(),
+	)
+	if err != nil {
+		log.Printf(
+			`{"event":"scanner_request_failed","error":%q}`,
+			err.Error(),
+		)
+
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{
+			Error: "scanner service unavailable",
+		})
+		return
+	}
+
 	scanID, err := newScanID()
 
 	if err != nil {
@@ -211,9 +229,10 @@ func (app *application) scanHandler(w http.ResponseWriter, r *http.Request) {
 	)
 
 	writeJSON(w, http.StatusAccepted, scanResponse{
-		ID:     scanID,
-		Status: "queued",
-		URL:    validatedURL.String(),
+		ID:             scanID,
+		Status:         "queued",
+		URL:            validatedURL.String(),
+		StaticAnalysis: analysis,
 	})
 }
 
@@ -264,9 +283,18 @@ func main() {
 	}
 	defer queue.close()
 
+	scanner, err := newScannerClient()
+	if err != nil {
+		log.Fatalf(
+			`{"event":"scanner_configuration_failed","error":%q}`,
+			err.Error(),
+		)
+	}
+
 	app := &application{
 		database: database,
 		queue:    queue,
+		scanner:  scanner,
 	}
 
 	mux := http.NewServeMux()

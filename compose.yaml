@@ -4,12 +4,16 @@ services:
     environment:
       DATABASE_URL: postgres://threatscanner:local-development-only@postgres:5432/threatscanner?sslmode=disable
       REDIS_ADDR: redis:6379
+      SCANNER_URL: http://scanner:8000
+      SCANNER_SERVICE_TOKEN: ${SCANNER_SERVICE_TOKEN:?SCANNER_SERVICE_TOKEN is required}
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      scanner:
         condition: service_healthy
 
   worker:
