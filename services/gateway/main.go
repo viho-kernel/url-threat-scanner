@@ -191,6 +191,7 @@ func (app *application) scanHandler(w http.ResponseWriter, r *http.Request) {
 		scanID,
 		validatedURL.String(),
 		user.UserID,
+		analysis,
 	); err != nil {
 		log.Printf(
 			`{"event":"scan_persistence_failed","scan_id":%q,"error":%q}`,
@@ -320,7 +321,7 @@ func main() {
 	mux.HandleFunc("POST /auth/register", app.authProxyHandler("/register"))
 	mux.HandleFunc("POST /auth/login", app.authProxyHandler("/login"))
 	mux.HandleFunc("POST /api-keys", app.authProxyHandler("/api-keys"))
-	mux.HandleFunc("POST /api-keys/revoke", app.authProxyHandler("/api-keys/revoke"),)
+	mux.HandleFunc("POST /api-keys/revoke", app.authProxyHandler("/api-keys/revoke"))
 	server := &http.Server{
 		Addr:              ":8080",
 		Handler:           mux,

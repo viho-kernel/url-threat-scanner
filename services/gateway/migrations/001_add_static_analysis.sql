@@ -1,0 +1,2 @@
+ALTER TABLE scans
+ADD COLUMN IF NOT EXISTS static_analysis JSONB;

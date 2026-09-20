@@ -14,6 +14,7 @@ type storedScanResponse struct {
 	ID             string          `json:"id"`
 	URL            string          `json:"url"`
 	Status         string          `json:"status"`
+	StaticAnalysis json.RawMessage `json:"static_analysis,omitempty"`
 	Result         json.RawMessage `json:"result,omitempty"`
 	ErrorMessage   *string         `json:"error_message,omitempty"`
 	WorkerAttempts int             `json:"worker_attempts"`
@@ -28,15 +29,28 @@ func (app *application) saveScan(
 	id string,
 	scanURL string,
 	userID string,
+	analysis *staticAnalysis,
 ) error {
-	_, err := app.database.ExecContext(
+	analysisJSON, err := json.Marshal(analysis)
+	if err != nil {
+		return err
+	}
+
+	_, err = app.database.ExecContext(
 		ctx,
-		`INSERT INTO scans (id, url, status, user_id)
-		 VALUES ($1, $2, $3, $4)`,
+		`INSERT INTO scans (
+		     id,
+		     url,
+		     status,
+		     user_id,
+		     static_analysis
+		 )
+		 VALUES ($1, $2, $3, $4, $5::jsonb)`,
 		id,
 		scanURL,
 		"queued",
 		userID,
+		string(analysisJSON),
 	)
 
 	return err
@@ -69,6 +83,7 @@ func (app *application) getScanHandler(
 	}
 
 	var scan storedScanResponse
+	var staticAnalysisJSON []byte
 	var resultJSON []byte
 	var errorMessage sql.NullString
 	var startedAt sql.NullTime
@@ -80,6 +95,7 @@ func (app *application) getScanHandler(
 		     id,
 		     url,
 		     status,
+			 static_analysis,
 		     result,
 		     error_message,
 		     worker_attempts,
@@ -96,6 +112,7 @@ func (app *application) getScanHandler(
 		&scan.ID,
 		&scan.URL,
 		&scan.Status,
+		&staticAnalysisJSON,
 		&resultJSON,
 		&errorMessage,
 		&scan.WorkerAttempts,
@@ -117,6 +134,12 @@ func (app *application) getScanHandler(
 			Error: "could not retrieve scan",
 		})
 		return
+	}
+
+	if staticAnalysisJSON != nil {
+
+		scan.StaticAnalysis = json.RawMessage(staticAnalysisJSON)
+
 	}
 
 	if resultJSON != nil {
