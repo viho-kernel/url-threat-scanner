@@ -3,10 +3,13 @@ services:
     build: ./services/gateway
     environment:
       DATABASE_URL: postgres://threatscanner:local-development-only@postgres:5432/threatscanner?sslmode=disable
+      REDIS_ADDR: redis:6379
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   postgres:
@@ -26,5 +29,24 @@ services:
       retries: 10
     ports:
       - "127.0.0.1:5432:5432"
+
+  redis:
+    image: redis:7.4.11-bookworm
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   postgres-data:
+  redis-data:

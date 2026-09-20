@@ -28,7 +28,7 @@ func (app *application) saveScan(
 		 VALUES ($1, $2, $3)`,
 		id,
 		scanURL,
-		"accepted",
+		"queued",
 	)
 
 	return err
@@ -86,4 +86,21 @@ func (app *application) getScanHandler(
 	}
 
 	writeJSON(w, http.StatusOK, scan)
+}
+
+func (app *application) markScanQueueFailed(
+	ctx context.Context,
+	id string,
+) error {
+	_, err := app.database.ExecContext(
+		ctx,
+		`UPDATE scans
+		 SET status = $1,
+		     updated_at = NOW()
+		 WHERE id = $2`,
+		"queue_failed",
+		id,
+	)
+
+	return err
 }

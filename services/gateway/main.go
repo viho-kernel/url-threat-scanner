@@ -15,8 +15,9 @@ import (
 	"time"
 )
 
-type scanRequest struct {
-	URL string `json:"url"`
+type application struct {
+	database *sql.DB
+	queue    *jobQueue
 }
 
 type scanResponse struct {
@@ -29,8 +30,8 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-type application struct {
-	database *sql.DB
+type scanRequest struct {
+	URL string `json:"url"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -154,6 +155,14 @@ func (app *application) scanHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scanID, err := newScanID()
+
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errorResponse{
+			Error: "could not create scan",
+		})
+		return
+	}
+
 	if err := app.saveScan(
 		r.Context(),
 		scanID,
@@ -171,6 +180,30 @@ func (app *application) scanHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := app.queue.enqueue(r.Context(), scanID); err != nil {
+		log.Printf(
+			`{"event":"scan_enqueue_failed","scan_id":%q,"error":%q}`,
+			scanID,
+			err.Error(),
+		)
+
+		if updateErr := app.markScanQueueFailed(
+			r.Context(),
+			scanID,
+		); updateErr != nil {
+			log.Printf(
+				`{"event":"queue_failure_status_update_failed","scan_id":%q,"error":%q}`,
+				scanID,
+				updateErr.Error(),
+			)
+		}
+
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{
+			Error: "scan queue unavailable",
+		})
+		return
+	}
+
 	log.Printf(
 		`{"event":"scan_accepted","scan_id":%q,"host":%q}`,
 		scanID,
@@ -179,12 +212,15 @@ func (app *application) scanHandler(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusAccepted, scanResponse{
 		ID:     scanID,
-		Status: "accepted",
+		Status: "queued",
 		URL:    validatedURL.String(),
 	})
 }
 
-func (app *application) readinessHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) readinessHandler(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
@@ -192,6 +228,16 @@ func (app *application) readinessHandler(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
 			"status":   "not_ready",
 			"database": "unavailable",
+			"redis":    "unknown",
+		})
+		return
+	}
+
+	if err := app.queue.ping(ctx); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"status":   "not_ready",
+			"database": "connected",
+			"redis":    "unavailable",
 		})
 		return
 	}
@@ -199,6 +245,7 @@ func (app *application) readinessHandler(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":   "ready",
 		"database": "connected",
+		"redis":    "connected",
 	})
 }
 
@@ -208,8 +255,20 @@ func main() {
 		log.Fatalf(`{"event":"database_connection_failed","error":%q}`, err.Error())
 	}
 	defer database.Close()
+	queue, err := openQueue()
+	if err != nil {
+		log.Fatalf(
+			`{"event":"redis_connection_failed","error":%q}`,
+			err.Error(),
+		)
+	}
+	defer queue.close()
 
-	app := &application{database: database}
+	app := &application{
+		database: database,
+		queue:    queue,
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	mux.HandleFunc("GET /ready", app.readinessHandler)
