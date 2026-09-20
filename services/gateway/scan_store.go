@@ -21,14 +21,16 @@ func (app *application) saveScan(
 	ctx context.Context,
 	id string,
 	scanURL string,
+	userID string,
 ) error {
 	_, err := app.database.ExecContext(
 		ctx,
-		`INSERT INTO scans (id, url, status)
-		 VALUES ($1, $2, $3)`,
+		`INSERT INTO scans (id, url, status, user_id)
+		 VALUES ($1, $2, $3, $4)`,
 		id,
 		scanURL,
 		"queued",
+		userID,
 	)
 
 	return err
@@ -47,6 +49,11 @@ func (app *application) getScanHandler(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	user, authenticated := app.authenticateRequest(w, r)
+	if !authenticated {
+		return
+	}
+
 	id := r.PathValue("id")
 	if !validScanID(id) {
 		writeJSON(w, http.StatusNotFound, errorResponse{
@@ -61,8 +68,10 @@ func (app *application) getScanHandler(
 		r.Context(),
 		`SELECT id, url, status, created_at, updated_at
 		 FROM scans
-		 WHERE id = $1`,
+		 WHERE id = $1
+		   AND user_id = $2`,
 		id,
+		user.UserID,
 	).Scan(
 		&scan.ID,
 		&scan.URL,
