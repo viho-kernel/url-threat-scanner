@@ -58,7 +58,26 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-
+  
+  scanner:
+    build:
+      context: ./services/scanner
+      dockerfile: Dockerfile
+    environment:
+      SERVICE_TOKEN: ${SCANNER_SERVICE_TOKEN:?SCANNER_SERVICE_TOKEN is required}
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+      
 volumes:
   postgres-data:
   redis-data:
