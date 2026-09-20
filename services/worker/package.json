@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node --test",
+    "scanner": "node http-scanner.js"
   },
   "dependencies": {
+    "ipaddr.js": "^2.5.0",
     "pg": "^8.0.0",
     "redis": "^5.0.0"
   }

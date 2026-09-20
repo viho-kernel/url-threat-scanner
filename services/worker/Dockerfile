@@ -14,7 +14,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
-COPY --chown=node:node package.json index.js ./
+COPY --chown=node:node package.json *.js ./
 
 USER node
 

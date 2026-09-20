@@ -4,17 +4,23 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 )
 
 type storedScanResponse struct {
-	ID        string    `json:"id"`
-	URL       string    `json:"url"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID             string          `json:"id"`
+	URL            string          `json:"url"`
+	Status         string          `json:"status"`
+	Result         json.RawMessage `json:"result,omitempty"`
+	ErrorMessage   *string         `json:"error_message,omitempty"`
+	WorkerAttempts int             `json:"worker_attempts"`
+	StartedAt      *time.Time      `json:"started_at,omitempty"`
+	CompletedAt    *time.Time      `json:"completed_at,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
 }
 
 func (app *application) saveScan(
@@ -63,10 +69,24 @@ func (app *application) getScanHandler(
 	}
 
 	var scan storedScanResponse
+	var resultJSON []byte
+	var errorMessage sql.NullString
+	var startedAt sql.NullTime
+	var completedAt sql.NullTime
 
 	err := app.database.QueryRowContext(
 		r.Context(),
-		`SELECT id, url, status, created_at, updated_at
+		`SELECT
+		     id,
+		     url,
+		     status,
+		     result,
+		     error_message,
+		     worker_attempts,
+		     started_at,
+		     completed_at,
+		     created_at,
+		     updated_at
 		 FROM scans
 		 WHERE id = $1
 		   AND user_id = $2`,
@@ -76,6 +96,11 @@ func (app *application) getScanHandler(
 		&scan.ID,
 		&scan.URL,
 		&scan.Status,
+		&resultJSON,
+		&errorMessage,
+		&scan.WorkerAttempts,
+		&startedAt,
+		&completedAt,
 		&scan.CreatedAt,
 		&scan.UpdatedAt,
 	)
@@ -92,6 +117,22 @@ func (app *application) getScanHandler(
 			Error: "could not retrieve scan",
 		})
 		return
+	}
+
+	if resultJSON != nil {
+		scan.Result = json.RawMessage(resultJSON)
+	}
+
+	if errorMessage.Valid {
+		scan.ErrorMessage = &errorMessage.String
+	}
+
+	if startedAt.Valid {
+		scan.StartedAt = &startedAt.Time
+	}
+
+	if completedAt.Valid {
+		scan.CompletedAt = &completedAt.Time
 	}
 
 	writeJSON(w, http.StatusOK, scan)
