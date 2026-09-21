@@ -78,7 +78,11 @@ export async function resolvePublicTarget(rawUrl) {
         verbatim: true
       }
     );
-  } catch {
+  } catch (error) {
+    if (error?.code === "EAI_AGAIN") {
+      throw new Error("dns_temporary_failure");
+    }
+
     throw new ScanSecurityError("dns_resolution_failed");
   }
 

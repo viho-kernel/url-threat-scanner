@@ -68,3 +68,10 @@ Phase 1 is in progress. Only the gateway health endpoint exists.
 
 1. Did the documentation commit succeed?
 2. Should Phase 1 initially support individual users only, before organization tenancy and roles?
+
+## Next session questions
+
+1. Shall we add frontend URL normalization so bare domains such as `youtube.com` become `https://youtube.com` while keeping strict Gateway validation?
+2. Did registration, automatic login, scanning, animation, result display, and session exit all work correctly in UI v2?
+3. Shall we complete Phase 1 tests, security hygiene, smoke testing, and the full architecture walkthrough before closing the phase?
+

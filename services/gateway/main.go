@@ -313,6 +313,14 @@ func main() {
 		auth:     auth,
 	}
 
+	uiHandler, err := newUIHandler()
+	if err != nil {
+		log.Fatalf(
+			`{"event":"ui_initialization_failed","error":%q}`,
+			err.Error(),
+		)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	mux.HandleFunc("GET /ready", app.readinessHandler)
@@ -322,6 +330,7 @@ func main() {
 	mux.HandleFunc("POST /auth/login", app.authProxyHandler("/login"))
 	mux.HandleFunc("POST /api-keys", app.authProxyHandler("/api-keys"))
 	mux.HandleFunc("POST /api-keys/revoke", app.authProxyHandler("/api-keys/revoke"))
+	mux.Handle("GET /", uiHandler)
 	server := &http.Server{
 		Addr:              ":8080",
 		Handler:           mux,
