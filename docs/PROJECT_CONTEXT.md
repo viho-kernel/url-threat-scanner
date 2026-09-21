@@ -1,76 +1,232 @@
-# URL Threat-Scanner SaaS — project context
+# URL Threat-Scanner SaaS — Project Context
 
 ## How we work
 
-The repository is the source of truth across AI tools, sessions, and machines. Read this file and `docs/PROGRESS.md` first. Work in small, precise checkpoints. At the end of every phase, output the exact updated contents of both files for committing. End each session with 1–3 sharp questions in the progress log. Prefer local/free tooling. Before billable infrastructure (EKS, VM-Series, TGW, NAT, multiple accounts, duplicate blue-green environments), check current free tier, trial, BYOL and license terms; build locally, launch for a brief proof, record evidence, tear down. Verify live prices and terms at deployment time.
+The repository is the single source of truth across AI tools, sessions and machines. Read this file and `docs/PROGRESS.md` before doing project work.
 
-## Starting point — explicit reset
+- Work in small, verifiable checkpoints and explain why each component exists.
+- Treat generated code as incomplete until Vihari runs it and verifies the result.
+- At the end of every phase, update this file and `docs/PROGRESS.md` with exact verified state.
+- End each working session with 1–3 sharp questions in the progress log.
+- Prefer free and local tooling.
+- Before billable infrastructure—including EKS, Palo Alto VM-Series, Transit Gateway, NAT gateways, multi-account environments or duplicate blue-green stacks—verify current free-tier limits, trials, BYOL/licensing and pricing. Build locally, create cloud resources briefly, capture evidence and tear them down.
+- The teaching goal is production reasoning and independent troubleshooting, not memorizing commands.
 
-As of 2026-09-18, the operator has not implemented, installed, built, tested, or committed any part of this project. Earlier AI-generated source files and archives are drafts, not evidence of completed work or the operator's repository. Begin at absolute beginner level: define a term in plain words, explain why this product needs it, do one small action, inspect its output, and only then advance. Do not treat a generated file as finished until the operator creates/runs and verifies it. Phase 0 is currently in progress, not complete.
+## Operator and career goal
 
-## Operator and goal
+Vihari has about four years of production network/NOC experience with Cisco ASA/FTD/Firepower, Palo Alto NGFW, SD-WAN, BGP, OSPF, VPN, ACI/DNAC, monitoring, incident coordination and RCA. He holds AWS Solutions Architect Associate and Cloud Practitioner certifications and has hands-on exposure to Terraform, Ansible, Docker, Kubernetes, Python and CI/CD.
 
-Vihari: ~4 years of production network operations (Cisco ASA/FTD/Firepower, Palo Alto NGFW, SD-WAN, BGP, OSPF, VPN, ACI/DNAC), AWS SAA and Cloud Practitioner, hands-on Terraform, Ansible, Docker, Kubernetes, Python and CI/CD. Transitioning into DevSecOps/Cloud Security. Teach the network concepts as we implement them, explain decisions using routing, trust boundaries and failure domains. Aim for a flagship interview project with the network and security layer as its strength.
+The goal is a flagship portfolio project for DevOps, AWS cloud security and network security roles. Teach new concepts using trust boundaries, routing, failure domains, observable evidence, rollback and operational ownership. Application development is supporting knowledge; the primary learning outcome is operating and securing the platform.
 
 ## Product
 
-Submit a URL; asynchronously inspect DNS, HTTP headers/response, reputation, and suspicious patterns; return a threat verdict, scan history and API. URLs are hostile input. Scanner and worker require isolation and controlled egress. Tie each architecture decision to this product. A limited heuristic verdict must never claim a URL is safe.
+The product is a URL Threat-Scanner SaaS.
 
-## Cloud boundary and job-relevant security scope (locked 2026-09-18)
+A user registers or authenticates, submits a URL, and receives an asynchronous threat-analysis result with history and an API. The platform performs:
 
-AWS is the only implementation cloud. Translate the job description's GCP IAM, service accounts, networking, secrets, workload isolation and Security Command Center themes into AWS IAM/roles and EKS Pod Identity or IRSA, VPC controls, Secrets Manager, EKS workload security, Security Hub/GuardDuty/Config. Do not create a GCP environment. Explain the conceptual GCP mapping in interview notes only.
+- strict URL validation;
+- suspicious-pattern/static URL analysis;
+- DNS resolution;
+- controlled HTTP inspection;
+- response-header and redirect evidence;
+- reputation-provider integration later;
+- a risk score, flags and verdict;
+- scan ownership and history.
 
-- Secure development and API security: a short threat model and data-flow diagram for URL input, service calls, queue, database, third-party reputation sources and egress; trust-boundary tests for SSRF, DNS rebinding, redirects, credential exposure, API key/JWT misuse, broken object authorization, tenant isolation and resource exhaustion. Add negative authorization tests and an API inventory. Make authorization explicit on every history/result query. Treat fetched pages and reputation responses as untrusted data.
-- Product-facing UI: add a minimal React client later, built as static assets served by the Go gateway, preserving four runtime services. Cover browser session/token handling, output encoding, CSP, CORS and CSRF where applicable. Decide the browser authentication approach before implementing it.
-- GitHub and supply chain: protected PR review, least-privilege workflow permissions, pinned actions/dependencies, OIDC to AWS with constrained trust, secret scanning, SAST, dependency and container scanning, IaC/policy gates, SBOM and provenance/attestation, signed or verified release artifacts where practical. Define which findings block release and how exceptions expire.
-- Vulnerability management: triage findings using exploitability, reachability, asset exposure and business impact; record owner, severity, due date, evidence, remediation PR and validating re-scan. Demonstrate fixing at least one actual issue rather than merely reporting tool output.
-- Assurance and response: structured security events with redaction and correlation IDs, alert and investigation path, a safe incident drill, RCA, threat-model revisions, penetration-test scope/evidence and audit-ready control-to-evidence mapping. SOC 2/ISO 27001 are learning mappings, not a compliance or certification claim.
-- Future AIOps security: when Phase 13 adds an alert-triage assistant or RAG, treat logs, scanned page text, connector data and retrieved documents as hostile. Test prompt injection, cross-tenant retrieval, sensitive-data leakage, excessive tool privileges, unsafe automated actions, output handling and cost/usage abuse. Read-only draft recommendations first; human approval for actions. No AI feature is required for the Phase 1 scanner.
+Submitted URLs and fetched content are hostile input. A heuristic result must never be presented as proof that a URL is safe.
+
+## Cloud boundary and job-relevant security scope
+
+AWS is the only implementation cloud. GCP concepts from target job descriptions are translated into AWS equivalents:
+
+- GCP IAM/service accounts → AWS IAM roles, EKS Pod Identity or IRSA;
+- GCP networking → VPC, route tables, security groups, NACLs and Kubernetes NetworkPolicies;
+- GCP secrets → AWS Secrets Manager and External Secrets Operator;
+- GCP Security Command Center → Security Hub, GuardDuty, Config and related evidence.
+
+No GCP environment will be created. Conceptual mappings may be documented for interviews.
+
+The project must cover:
+
+- OWASP web and API risks;
+- explicit authentication and authorization;
+- tenant isolation and broken-object-level authorization tests;
+- SSRF, DNS rebinding, unsafe redirects and private-address protection;
+- resource limits and controlled egress;
+- secure SDLC and practical vulnerability remediation;
+- GitHub Actions hardening, SAST, SCA, secret scanning, SBOM and release evidence;
+- structured security events, alerting, investigation, RCA and drills;
+- audit-ready architecture and control evidence;
+- future AI security: prompt injection, data leakage, connector/tool misuse, cross-tenant retrieval and human approval for unsafe actions.
+
+SOC 2 and ISO 27001 are learning/evidence mappings only, not compliance claims.
 
 ## Locked application design
 
-Four independently containerized services: Go gateway/public API (only internet-facing service); Python/FastAPI auth (users, API keys, JWT); Python scanner/core (analysis, reachable only from gateway); Node.js worker (consumes queue, makes controlled outbound requests, writes DB). If three languages overwhelm the operator, worker may move to Python while preserving Go+Python. Explain optimized per-language multi-stage images: Go to distroless, Python to slim, Node to suitable runtime; measure image size and attack surface. Local state uses Redis queue and Postgres database. Gateway calls auth and scanner with an internal token; clients use API key or JWT; only gateway publishes a local port. Worker independently validates DNS at request time and pins approved destination; redirects are not followed. Phase 1 implementation is a lab baseline, with limitations listed in PROGRESS.
+Four independently containerized runtime services:
+
+1. **Gateway — Go**
+   - Only public-facing service.
+   - Publishes local port `127.0.0.1:8080`.
+   - Serves the React UI and public API.
+   - Validates hostile URL input.
+   - Proxies registration/login/API-key operations to Auth.
+   - Calls Scanner with an internal service token.
+   - Persists scan ownership and static analysis.
+   - Enqueues scan IDs in Redis.
+   - Enforces authentication and per-user result authorization.
+
+2. **Auth — Python/FastAPI**
+   - Internal-only service on port 8001.
+   - Stores users with Argon2 password hashes.
+   - Issues and validates short-lived JWTs.
+   - Creates, hashes, verifies and revokes API keys.
+   - Validates the active user behind every credential.
+   - Requires a Gateway-to-Auth service token.
+
+3. **Scanner — Python/FastAPI**
+   - Internal-only service on port 8000.
+   - Performs static URL/pattern analysis.
+   - Returns verdict, risk score and flags.
+   - Requires a Gateway-to-Scanner service token.
+   - Does not perform uncontrolled outbound fetching.
+
+4. **Worker — Node.js**
+   - Internal background service with no published port.
+   - Atomically moves Redis jobs from `scan-jobs` to `scan-jobs:processing`.
+   - Recovers interrupted processing jobs after restart.
+   - Resolves DNS and rejects private/special destinations.
+   - Pins the approved address used for the HTTP connection.
+   - Revalidates redirects and limits redirects, body size and timeout.
+   - Distinguishes temporary retryable failures from permanent/security failures.
+   - Writes completed/failed evidence to PostgreSQL and acknowledges Redis jobs only after persistence.
+
+Local state services:
+
+- PostgreSQL stores users, API keys, scan ownership, lifecycle, static analysis and worker results.
+- Redis is the asynchronous work queue, not the system of record.
+
+If the polyglot workload becomes unhelpful, the Worker may later move to Python while retaining Go and Python. This is not currently planned.
+
+## Phase 1 verified implementation
+
+Phase 1 was completed on 2026-09-21.
+
+The local Compose platform runs six containers: Gateway, Auth, Scanner, Worker, PostgreSQL and Redis. Only Gateway is exposed to the host application path. PostgreSQL is host-bound only for local administration; Auth and Scanner use internal Compose networking.
+
+Verified capabilities:
+
+- React interface embedded into the Go binary and served from `/`;
+- registration, automatic login, login and session exit;
+- bare-domain UI normalization to HTTPS while Gateway validation remains authoritative;
+- JWT authentication;
+- API-key creation, verification, expiry metadata, last-used timestamp and revocation;
+- internal service tokens between Gateway and Auth/Scanner;
+- individual-user tenant model;
+- ownership filter on scan retrieval using both scan ID and user ID;
+- static analysis persisted as PostgreSQL JSONB;
+- asynchronous status lifecycle: queued → running → completed/failed;
+- worker attempts, timestamps, result JSON and safe error codes;
+- DNS/HTTP inspection with bounded redirects, timeout and body sample;
+- SSRF protection for localhost, private, link-local, multicast and special addresses;
+- DNS pinning to reduce DNS-rebinding risk;
+- queue recovery and retry classification;
+- health and readiness endpoints;
+- structured application events;
+- non-root application containers;
+- lockfiles and multi-stage builds;
+- generated `node_modules` and frontend `dist` excluded from Git;
+- real end-to-end scans verified through UI and API;
+- source pushed to `viho-kernel/url-threat-scanner`.
+
+Verified Phase 1 traffic flow:
+
+Browser or API client → Go Gateway → Auth verification and Scanner static analysis → PostgreSQL scan record → Redis pending queue → Node Worker → controlled public DNS/HTTP target → PostgreSQL result → authenticated Gateway result query.
+
+## Authentication and trust decisions
+
+Three credentials serve different purposes:
+
+- **JWT:** short-lived end-user browser/API session credential.
+- **API key:** long-lived automation credential; only a SHA-256 hash and display prefix are stored.
+- **Service token:** shared internal Phase 1 credential proving that a request came through the Gateway.
+
+Service tokens are a local baseline, not the final production identity mechanism. In Kubernetes/AWS they will be replaced or strengthened using NetworkPolicies, workload identity, Secrets Manager/External Secrets and transport security as appropriate.
+
+The React application keeps its JWT only in page memory. Refreshing or exiting removes it. Future browser-security work includes a formal CSP, secure headers and deciding whether production should use hardened HttpOnly cookies instead.
+
+## URL and network-security decisions
+
+The React UI may prepend `https://` to a bare domain for usability. This is not a security control. The Gateway independently requires HTTP/HTTPS, a hostname, approved ports, no embedded credentials, no fragments, and rejects literal private/special IPs.
+
+The Worker performs the decisive outbound security checks at request time:
+
+- resolves every address;
+- rejects the destination if any resolved address is not public;
+- pins the selected approved address during connection;
+- applies the same controls to redirects;
+- limits redirects, timeout and body sample;
+- records resolved and connected addresses;
+- never treats fetched content as trusted code.
+
+Temporary DNS failures such as `EAI_AGAIN` are retryable. Invalid domains and security-policy violations fail without repeated outbound attempts.
+
+## Phase 1 limitations and deferred improvements
+
+These are documented gaps, not hidden claims:
+
+- Static heuristics and network inspection do not prove a site is safe.
+- Reputation integration is represented as `not_configured`.
+- ASN/GeoIP hosting intelligence is deferred; CDN addresses may not identify the origin.
+- Redis list processing is a local baseline; later evaluate Redis Streams, a managed queue or `BLMOVE`.
+- Service tokens are shared secrets without rotation or mTLS.
+- PostgreSQL and Redis use local development credentials.
+- Existing early scan rows may have nullable ownership fields.
+- The UI design and colour system will be refined later.
+- The UI has no full scan-history list endpoint yet.
+- Automated Go and Worker security tests exist; Auth/Scanner and cross-service test coverage must expand in the CI/CD phase.
+- Formal rate limiting, quotas, CSP, secure response headers and production session-cookie design remain future security work.
+- GeoIP/reputation caching must be designed with controlled egress, privacy, licensing and provider-failure handling.
+- Local Compose is not a production orchestrator.
 
 ## Target platform and domains
 
-- Local Kubernetes kind/k3s for iteration; Terraform-managed EKS only in cloud phases. Teach managed control plane versus node data plane and pod networking.
-- Multi-AZ VPC with public/private/data tiers, routing/NAT; second VPC or on-prem simulator via site-to-site IPsec VPN with BGP over Transit Gateway.
-- SGs, NACLs, Kubernetes NetworkPolicies, controlled scanner egress; Palo Alto VM-Series inspection configured using Ansible policy-as-code.
-- EKS behind ALB; S3, Route 53, IAM. GuardDuty, Security Hub, AWS Config, CloudTrail, IAM Access Analyzer, KMS, Secrets Manager and Falco.
-- GitHub Actions only: tests; CodeQL/Semgrep SAST, Gitleaks secrets, Trivy/Snyk SCA, Trivy image scanning, tfsec/checkov IaC scanning, OPA/Conftest gate. Check licenses and practical overlap at implementation time.
-- Argo CD pull-based GitOps; External Secrets Operator with AWS Secrets Manager; no secrets in Git or Kubernetes manifests.
-- Go/Python/Node for services; Docker multi-stage images; Ansible for host CIS hardening, VPN simulator IPsec+BGP using FRRouting and Palo Alto policies; Bash for build/deploy/smoke/triage; parameterized Terraform for AWS.
-- Separate AWS Organizations dev/staging/prod accounts; promote consistent Terraform and application changes across accounts. Cloud account setup and billing must be explicitly planned before creation.
-- Commit → Actions tests/security gates → build/scan images → ECR → auto dev and smoke → manual staging approval/integration → manual prod approval/blue-green with health check rollback; Argo CD reconciles Git desired state. Define the exact Git promotion and traffic switch mechanism before Phase 9.
-- Patch base images with rebuild and Trivy proof; OS/nodes with Ansible and managed node updates; dependencies with Dependabot and re-scan; minimize downtime with promotion and blue-green.
-- Prometheus, Grafana, Loki, Alertmanager; health/readiness and structured logs from day one. Later AIOps on queryable metrics/logs/events: anomaly detection, alert-to-runbook draft assistant, log-pattern classification.
-- Document a node/AZ failure recovery test and stateful backup/DR. Deliver cloud incident and patching runbooks translating NOC operations to platform ownership.
+- Local Kubernetes using kind or k3s; EKS only during cloud phases.
+- Multi-AZ VPC with public, private application and data tiers.
+- A second VPC or on-premises simulator connected with site-to-site IPsec, BGP and Transit Gateway.
+- Security groups, NACLs, Kubernetes NetworkPolicies and controlled scanner egress.
+- Palo Alto VM-Series inspection configured through Ansible policy-as-code.
+- EKS behind ALB plus S3, Route 53 and IAM.
+- GuardDuty, Security Hub, Config, CloudTrail, IAM Access Analyzer, KMS, Secrets Manager and Falco.
+- GitHub Actions only: tests, CodeQL/Semgrep, Gitleaks, Trivy/Snyk, tfsec/checkov and OPA/Conftest.
+- Argo CD pull-based reconciliation.
+- External Secrets Operator with AWS Secrets Manager; no Kubernetes secrets in Git.
+- Ansible for host hardening, VPN/BGP simulation and Palo Alto policies.
+- Bash for repeatable build, deployment, smoke-test and triage workflows.
+- Parameterized Terraform for all AWS infrastructure.
+- Separate AWS Organizations accounts for dev, staging and production.
+- Promotion from dev to staging to production with approvals and blue-green production deployment.
+- Prometheus, Grafana, Loki and Alertmanager.
+- Resilience testing, backup/restore and documented incident/patching runbooks.
+- Future AIOps after the platform produces trustworthy structured telemetry.
 
 ## Phase checkpoints
 
-0. Repository skeleton, this context file and `docs/PROGRESS.md`.
-1. Four polyglot services communicate locally via Compose with service authentication.
-2. Optimized multi-stage images and local Kubernetes with NetworkPolicies.
-3. Terraform AWS network foundation, multi-account VPCs/subnets/TGW.
-4. Ansible VPN and BGP hybrid simulator.
-5. Palo Alto VM-Series, cloud security monitoring and Falco.
-6. Terraform EKS.
-7. GitHub Actions and security gates.
+0. Repository skeleton and living context/progress documents. **Completed.**
+1. Four polyglot services integrated locally through Compose with service authentication. **Completed.**
+2. Local Kubernetes deployment with NetworkPolicies and container hardening.
+3. Terraform AWS network foundation: multi-account VPCs, subnets and Transit Gateway.
+4. Ansible-managed VPN and BGP hybrid simulator.
+5. Palo Alto VM-Series, AWS security monitoring and Falco.
+6. Terraform-managed EKS.
+7. GitHub Actions pipeline and security gates.
 8. Argo CD and External Secrets.
-9. Multi-environment promotion and blue-green.
+9. Multi-environment promotion and blue-green deployment.
 10. Observability stack.
 11. Resilience/DR and failure test.
 12. Incident and patching runbooks.
-13. Future AIOps layer.
+13. Future AIOps and AI product-security layer.
 
-## Proposed architecture (Phase 1, not implemented)
+## Cost discipline
 
-Client → Go gateway → FastAPI auth for identity and FastAPI scanner for preliminary checks → Postgres scan record + Redis queue → Node worker → controlled public HTTP(S) target → Postgres result. Design and validate each link during its phase. Nothing is running yet.
-
-## Preflight before further implementation
-
-Confirm the host tools and available RAM/CPU for Compose and local Kubernetes; repository access and GitHub Actions usage; authorized scan targets (start with an owned local test endpoint); the SaaS tenant model (individual accounts first or organizations); and the browser UI's auth expectations. Check AWS account billing status and a small spend ceiling before cloud work. Do not enable an external reputation provider, paid security service, or outbound cloud workload until its terms and cost are reviewed. Record test evidence and remaining gaps in PROGRESS.
-
-## Verified implementation status
-
-Phase 1 has started. The first verified component is a Go gateway running as a non-root user in a minimal scratch container. It exposes only `127.0.0.1:8080` locally and provides `GET /health`. No authentication, scan submission, queue, database, scanner, or worker has been implemented yet.
+Phase 0 and Phase 1 are local and incur no AWS infrastructure cost. Before every cloud phase, confirm account/billing status, service quotas, current free-tier eligibility, NAT/TGW/EKS/VM-Series costs and Palo Alto licensing. Use budgets and alerts, minimize runtime, capture evidence and destroy resources after proof.
